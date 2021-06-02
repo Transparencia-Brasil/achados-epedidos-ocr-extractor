@@ -114,9 +114,15 @@ class PedidoAnexoIndexador
     /**
      * Realiza a Contagem de Anexos Pendentes para a Analíse no VISION
      */
-    public function ContarAnexos()
+    public function ContarAnexos($somenteAnexo = NULL)
     {
-        $result = $this->DbConn->query("Select COUNT(*) as Cnt From pedidos_anexos Where CodigoStatusExportacaoES = 'esperando'");
+        $result = NULL;
+        
+        if (is_null($somenteAnexo)) {
+            $result = $this->DbConn->query("Select COUNT(*) as Cnt From pedidos_anexos Where CodigoStatusExportacaoES = 'esperando'");
+        } else {
+            $result = $this->DbConn->query("Select COUNT(*) as Cnt From pedidos_anexos Where Codigo = $somenteAnexo");
+        }
 
         if ($result->num_rows > 0) {
             return $result->fetch_assoc()["Cnt"];
@@ -137,9 +143,13 @@ class PedidoAnexoIndexador
     /**
      * Realiza a Contagem de Anexos Pendentes para a Analíse no VISION
      */
-    public function BuscarAnexos($limite, $pular)
+    public function BuscarAnexos($limite, $pular, $somenteAnexo = NULL)
     {
-        $result = $this->DbConn->query("Select * From pedidos_anexos Where CodigoStatusExportacaoES = 'esperando' Order By Criacao DESC LIMIT $limite OFFSET $pular");
+        if (is_null($somenteAnexo)) {
+            $result = $this->DbConn->query("Select * From pedidos_anexos Where CodigoStatusExportacaoES = 'esperando' Order By Criacao DESC LIMIT $limite OFFSET $pular");
+        } else {
+            $result = $this->DbConn->query("Select * From pedidos_anexos Where Codigo = $somenteAnexo");
+        }
         return $result;
     }
 
@@ -177,7 +187,13 @@ class PedidoAnexoIndexador
             foreach ($worksheet->getRowIterator() as $row) {
                 $rowTexto = "";
                 $cellIterator = $row->getCellIterator();
-                $cellIterator->setIterateOnlyExistingCells(TRUE);
+                
+                try {
+                    $cellIterator->setIterateOnlyExistingCells(true);
+                } catch (PHPExcel_Exception $e) {
+                    $this->AddLog("Não foi possivel determinar o fim da planinha, analise poderá ser lenta.");
+                }
+
                 foreach ($cellIterator as $cell) {
                     $rowTexto .= $cell->getValue() . " ";
                     $cellCount += 1;
@@ -363,9 +379,10 @@ class PedidoAnexoIndexador
     /**
      * Executa o Algoritmo de Indexação dos Anexos com o Vision
      */
-    public function Run()
+    public function Run($somenteAnexo = NULL)
     {
         $QTD_POR_LOTE = 100; // Ajusta a Quantidade de Anexos que irão ser processados por Lote.
+        $CntAnexos = 0;
 
         // -
         $this->rltCaminho = FILES_PATH  . "/RltIndexador-" . date('d-m-Y-H-i')  . ".csv";
@@ -373,11 +390,10 @@ class PedidoAnexoIndexador
 
         file_put_contents($this->rltCaminho, "sep=,\r\n");
         file_put_contents($this->rltCaminho, "Horario,CodigoPedidoAnexo,Arquivo,Extensao,Mensagem\r\n", FILE_APPEND);
-
+        
 
         // -
-        $CntAnexos = $this->ContarAnexos();
-
+        $CntAnexos = $this->ContarAnexos($somenteAnexo);
         echo "Anexos há processar: $CntAnexos" . PHP_EOL;
 
         if ($CntAnexos > 0) {
@@ -389,7 +405,7 @@ class PedidoAnexoIndexador
 
                 // Pesquisa o Lote
                 echo "Fetch Lote: $iLote = $pPular / $QTD_POR_LOTE" . PHP_EOL;
-                $result = $this->BuscarAnexos($QTD_POR_LOTE, $pPular);
+                $result = $this->BuscarAnexos($QTD_POR_LOTE, $pPular, $somenteAnexo);
 
                 // Processa o Lote
                 while ($row = $result->fetch_assoc()) {
@@ -527,7 +543,13 @@ if ($locker->Bloquear("PedidosAnexoIndexador")) {
     try {
         $indexador = new PedidoAnexoIndexador();
         $indexador->Init();
-        $indexador->Run();
+        
+        if (isset($argv[1])) {
+            $indexador->Run($argv[1]);
+        } else {
+            $indexador->Run(null);
+        }
+
     } catch (Exception $e) {
         echo "Ocorreu um erro na execução: " . $e->getMessage();
     }
