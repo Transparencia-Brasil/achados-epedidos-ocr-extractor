@@ -248,7 +248,7 @@ class PedidoAnexoIndexador
 
     protected function AtualizarAnexoConteudo($row, $textos, $caminho, $ext)
     {
-        echo "Indexando: " . $row["Arquivo"] . PHP_EOL;
+        echo "Indexando: " . $caminho. PHP_EOL;
         
         $reqBody = array(
             "anexos_conteudo_arquivo" => $textos
@@ -301,8 +301,8 @@ class PedidoAnexoIndexador
     public function ProcessarAnexo($row)
     {
         $this->cleanUpOcrDir();
-        $caminho = $row["Arquivo"];
-        $codigo = $row["Codigo"];
+        $caminho = utf8_encode($row["Arquivo"]);
+        $codigo = $row["Codigo"];        
         $caminhoParts = pathinfo($caminho);
         $ext = trim(strtoupper($caminhoParts['extension']));
         $this->initLogs($caminhoParts['filename']);
@@ -314,8 +314,8 @@ class PedidoAnexoIndexador
 
         // -
         $gsPath = BUCKET_PATH."pedidos/$caminho";
-        $lcPath = FILES_PATH . "pedidos/$caminho";
-        
+        $lcPath = FILES_PATH . "pedidos/$caminho";        
+
         $this->AddLog("Caminho: " . $lcPath);
 
         // - Verifica se existe
