@@ -8,5 +8,10 @@
         "guzzlehttp/guzzle": "~6.0",
         "box/spout": "^2.7",
         "symfony/dotenv": "^3.4"
+    },
+    "scripts": {
+        "post-root-package-install": [
+            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
+        ]
     }
 }
