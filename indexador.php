@@ -96,9 +96,16 @@ class PedidoAnexoIndexador
 
     public function Init()
     {
-        $this->DbConn =  new \mysqli($_ENV['DB_HOST'], $_ENV['DB_USERNAME'], $_ENV['DB_PASSWORD'], $_ENV['DB_DATABASE']);
-        if ($this->DbConn->connect_error) {
-            die("DB Connection failed: " . $this->DbConn->connect_error . "\n");
+        if (isset($_ENV['MYSQL_ATTR_SSL_CA']) && !empty($_ENV['MYSQL_ATTR_SSL_CA'])) {
+            $this->DbConn = mysqli_init();
+            $this->DbConn->options(MYSQLI_OPT_SSL_VERIFY_SERVER_CERT, true);
+            $this->DbConn->ssl_set(NULL, NULL, $_ENV['MYSQL_ATTR_SSL_CA'], NULL, NULL);
+            $this->DbConn->real_connect($_ENV['DB_HOST'], $_ENV['DB_USERNAME'], $_ENV['DB_PASSWORD'], $_ENV['DB_DATABASE']);
+        } else {
+            $this->DbConn =  new \mysqli($_ENV['DB_HOST'], $_ENV['DB_USERNAME'], $_ENV['DB_PASSWORD'], $_ENV['DB_DATABASE']);
+            if ($this->DbConn->connect_error) {
+                die("DB Connection failed: " . $this->DbConn->connect_error . "\n");
+            }
         }
 
         $rendererName = \PhpOffice\PhpWord\Settings::PDF_RENDERER_DOMPDF;
