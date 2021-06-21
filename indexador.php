@@ -164,7 +164,7 @@ class PedidoAnexoIndexador
     {
         $this->AddLog("Anexo precisa ser convertido!");
         $caminhoNovo="ocr_indexador/convertidos/atual.pdf";
-        $lcOutput = FILES_PATH . "$caminhoNovo";
+        $lcOutput = FILES_PATH . "/$caminhoNovo";
 
         $this->AddLog("$lcPath " . " -> convertendo... -> " . $lcOutput);
 
@@ -172,7 +172,7 @@ class PedidoAnexoIndexador
         $objWriter = \PhpOffice\PhpWord\IOFactory::createWriter($phpWord, 'PDF');
         $objWriter->save($lcOutput);
 
-        $gsPath = BUCKET_PATH.$caminhoNovo;
+        $gsPath = BUCKET_PATH."/$caminhoNovo";
         $this->AddLog("Convertido");
 
         // -------------------------------------
@@ -220,14 +220,14 @@ class PedidoAnexoIndexador
     {
         $this->AddLog("Anexo precisa ser convertido!");
         $caminhoNovo="ocr_indexador/convertidos/atual.tiff";
-        $lcOutput =FILES_PATH . "$caminhoNovo";
+        $lcOutput =FILES_PATH . "/$caminhoNovo";
 
         $this->AddLog("$lcPath " . " -> convertendo... -> " . $lcOutput);
 
         $image = new \Imagick($lcPath);
         $image->writeImage($lcOutput);
 
-        $gsPath = BUCKET_PATH.$caminhoNovo;
+        $gsPath = BUCKET_PATH."/$caminhoNovo";
         $this->AddLog("Convertido");
 
         // -------------------------------------
@@ -236,14 +236,14 @@ class PedidoAnexoIndexador
 
     private function cleanUpOcrDir()
     {
-        $files = glob(FILES_PATH . 'ocr_indexador/convertidos/*');
+        $files = glob(FILES_PATH . '/ocr_indexador/convertidos/*');
         foreach ($files as $file) { // iterate files
             if (is_file($file)) {
                 unlink($file); // delete file
             }
         }
 
-        $files = glob(FILES_PATH . 'ocr_indexador/*');
+        $files = glob(FILES_PATH . '/ocr_indexador/*');
         foreach ($files as $file) { // iterate files
             if (is_file($file)) {
                 unlink($file); // delete file
@@ -294,7 +294,7 @@ class PedidoAnexoIndexador
 
     protected function initLogs($arquivo)
     {
-        $pastaLogs = FILES_PATH . "ocr_indexador/logs/" . date('d-m-Y-H-i');
+        $pastaLogs = FILES_PATH . "/ocr_indexador/logs/" . date('d-m-Y-H-i');
         if (!file_exists($pastaLogs)) {
             mkdir($pastaLogs, 0777, true);
         }
@@ -320,8 +320,8 @@ class PedidoAnexoIndexador
         $textos = "";
 
         // -
-        $gsPath = BUCKET_PATH."pedidos/$caminho";
-        $lcPath = FILES_PATH . "pedidos/$caminho";        
+        $gsPath = BUCKET_PATH."/pedidos/$caminho";
+        $lcPath = FILES_PATH . "/pedidos/$caminho";        
 
         $this->AddLog("Caminho: " . $lcPath);
 
@@ -335,7 +335,7 @@ class PedidoAnexoIndexador
         }
 
         // -
-        $gsOutput = BUCKET_PATH."ocr_indexador/";
+        $gsOutput = BUCKET_PATH."/ocr_indexador/";
 
         // -------------------------------------
         // - Converte o Anexo em PDF
