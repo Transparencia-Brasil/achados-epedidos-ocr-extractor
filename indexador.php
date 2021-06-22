@@ -97,12 +97,13 @@ class PedidoAnexoIndexador
 
     # Explicitly use service account credentials by specifying the private key
     # file.
-    private $config;
+    private $googleVisionCredentials;
+    private $googleStorageCredentials;
 
     public function Init()
     {
 
-        $this->config = [
+        $this->googleCredentials = [
             'credentials' => $_ENV["GOOGLE_APPLICATION_CREDENTIALS"]
         ];
         if (isset($_ENV['MYSQL_ATTR_SSL_CA']) && !empty($_ENV['MYSQL_ATTR_SSL_CA'])) {
@@ -487,7 +488,7 @@ class PedidoAnexoIndexador
             $requests = [$request];
 
             # make request
-            $imageAnnotator = new ImageAnnotatorClient($this->config);
+            $imageAnnotator = new ImageAnnotatorClient($this->googleCredentials);
             $operation = $imageAnnotator->asyncBatchAnnotateFiles($requests);
             print('Waiting for operation to finish.' . PHP_EOL);
             $operation->pollUntilComplete();
@@ -499,7 +500,9 @@ class PedidoAnexoIndexador
                 $bucketName = $match[1];
                 $prefix = isset($match[2]) ? $match[2] : '';
 
-                $storage = new StorageClient($this->config);
+
+
+                $storage = new StorageClient($this->googleStorageCredentials);
                 $bucket = $storage->bucket($bucketName);
                 $options = ['prefix' => $prefix];
                 $objects = $bucket->objects($options);
