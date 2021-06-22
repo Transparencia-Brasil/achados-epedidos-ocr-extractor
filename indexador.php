@@ -103,7 +103,11 @@ class PedidoAnexoIndexador
     public function Init()
     {
 
-        $this->googleCredentials = [
+        $this->googleStorageCredentials = [
+            'keyFilePath' => $_ENV["GOOGLE_APPLICATION_CREDENTIALS"]
+        ];
+                
+        $this->googleVisionCredentials = [
             'credentials' => $_ENV["GOOGLE_APPLICATION_CREDENTIALS"]
         ];
         if (isset($_ENV['MYSQL_ATTR_SSL_CA']) && !empty($_ENV['MYSQL_ATTR_SSL_CA'])) {
@@ -488,7 +492,7 @@ class PedidoAnexoIndexador
             $requests = [$request];
 
             # make request
-            $imageAnnotator = new ImageAnnotatorClient($this->googleCredentials);
+            $imageAnnotator = new ImageAnnotatorClient($this->googleVisionCredentials);
             $operation = $imageAnnotator->asyncBatchAnnotateFiles($requests);
             print('Waiting for operation to finish.' . PHP_EOL);
             $operation->pollUntilComplete();
