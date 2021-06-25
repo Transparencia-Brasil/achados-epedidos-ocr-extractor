@@ -94,11 +94,24 @@ class PedidoAnexoIndexador
     private $ApiClient;
     private $LogAtual;
 
+
+    # Explicitly use service account credentials by specifying the private key
+    # file.
+    private $googleVisionCredentials;
+    private $googleStorageCredentials;
+
     public function Init()
     {
 
 
 
+        $this->googleStorageCredentials = [
+            'keyFilePath' => $_ENV["GOOGLE_APPLICATION_CREDENTIALS"]
+        ];
+                
+        $this->googleVisionCredentials = [
+            'credentials' => $_ENV["GOOGLE_APPLICATION_CREDENTIALS"]
+        ];
         if (isset($_ENV['MYSQL_ATTR_SSL_CA']) && !empty($_ENV['MYSQL_ATTR_SSL_CA'])) {
             $this->DbConn = mysqli_init();
             $this->DbConn->options(MYSQLI_OPT_SSL_VERIFY_SERVER_CERT, true);
@@ -328,10 +341,10 @@ class PedidoAnexoIndexador
 
         // -
         $gsPath = BUCKET_PATH."/pedidos/$caminho";
-        $lcPath = FILES_PATH . "/pedidos/$caminho";        
+        $lcPath = FILES_PATH . "/pedidos/$caminho";  
 
         $this->AddLog("Caminho: " . $lcPath);
-
+        
         // - Verifica se existe
         if (file_exists($lcPath) === false) {
             $this->AtualizarEstadoAnexo($codigo, "falha");
@@ -485,7 +498,7 @@ class PedidoAnexoIndexador
             $requests = [$request];
 
             # make request
-            $imageAnnotator = new ImageAnnotatorClient();
+            $imageAnnotator = new ImageAnnotatorClient($this->googleVisionCredentials);
             $operation = $imageAnnotator->asyncBatchAnnotateFiles($requests);
             print('Waiting for operation to finish.' . PHP_EOL);
             $operation->pollUntilComplete();
@@ -497,7 +510,9 @@ class PedidoAnexoIndexador
                 $bucketName = $match[1];
                 $prefix = isset($match[2]) ? $match[2] : '';
 
-                $storage = new StorageClient();
+
+
+                $storage = new StorageClient($this->googleStorageCredentials);
                 $bucket = $storage->bucket($bucketName);
                 $options = ['prefix' => $prefix];
                 $objects = $bucket->objects($options);

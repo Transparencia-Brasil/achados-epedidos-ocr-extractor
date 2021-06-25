@@ -10,6 +10,10 @@ docker-compose build
 docker-compose run app php indexador.php
 ```
 
+- rodando script passando Codigo do registro na tabela pedidos_anexos
+```
+docker-compose run app php indexador.php [Codigo.pedidos_anexos(Int)]
+```
 - variáveis de ambiente: 
 
 DB_HOST=(Endereço do banco de dados)\
