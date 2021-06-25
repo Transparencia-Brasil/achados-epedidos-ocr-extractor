@@ -96,6 +96,9 @@ class PedidoAnexoIndexador
 
     public function Init()
     {
+
+
+
         if (isset($_ENV['MYSQL_ATTR_SSL_CA']) && !empty($_ENV['MYSQL_ATTR_SSL_CA'])) {
             $this->DbConn = mysqli_init();
             $this->DbConn->options(MYSQLI_OPT_SSL_VERIFY_SERVER_CERT, true);
@@ -106,7 +109,8 @@ class PedidoAnexoIndexador
             if ($this->DbConn->connect_error) {
                 die("DB Connection failed: " . $this->DbConn->connect_error . "\n");
             }
-        }
+         }
+
 
         $rendererName = \PhpOffice\PhpWord\Settings::PDF_RENDERER_DOMPDF;
         $rendererLibraryPath = realpath(__DIR__ . '/vendor/dompdf/dompdf');
@@ -198,6 +202,9 @@ class PedidoAnexoIndexador
                 try {
                     $cellIterator->setIterateOnlyExistingCells(true);
                 } catch (PHPExcel_Exception $e) {
+                    $this->AddLog("Não foi possivel determinar o fim da planinha, analise poderá ser lenta.");
+                }
+                catch (\Exception $e) {
                     $this->AddLog("Não foi possivel determinar o fim da planinha, analise poderá ser lenta.");
                 }
 
