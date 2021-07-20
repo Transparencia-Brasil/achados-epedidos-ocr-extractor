@@ -10,6 +10,7 @@ namespace Google\Cloud\Samples\Vision;
 require __DIR__ . '/vendor/autoload.php';
 
 use Google\Cloud\Storage\StorageClient;
+use Google\Cloud\Vision\V1\AnnotateFileRequest;
 use Google\Cloud\Vision\V1\AnnotateFileResponse;
 use Google\Cloud\Vision\V1\AsyncAnnotateFileRequest;
 use Google\Cloud\Vision\V1\Feature;
@@ -27,6 +28,7 @@ $dotenv->load(__DIR__.'/.env');
 
 define("FILES_PATH", $_ENV["FILES_PATH"]);
 define("BUCKET_PATH", $_ENV["BUCKET_PATH"]);
+define("API_URL", $_ENV["API_URL"]);
 ini_set('memory_limit', '1024M'); 
 
 /**
@@ -143,7 +145,7 @@ class PedidoAnexoIndexador
         $result = NULL;
         
         if (is_null($somenteAnexo)) {
-            $result = $this->DbConn->query("Select COUNT(*) as Cnt From pedidos_anexos Where CodigoStatusExportacaoES = 'esperando'");
+            $result = $this->DbConn->query("Select COUNT(*) as Cnt From pedidos_anexos Where CodigoStatusExportacaoES = 'esperando' and Arquivo LIKE '%.pdf'");
         } else {
             $result = $this->DbConn->query("Select COUNT(*) as Cnt From pedidos_anexos Where Codigo = $somenteAnexo");
         }
@@ -170,7 +172,7 @@ class PedidoAnexoIndexador
     public function BuscarAnexos($limite, $pular, $somenteAnexo = NULL)
     {
         if (is_null($somenteAnexo)) {
-            $result = $this->DbConn->query("Select * From pedidos_anexos Where CodigoStatusExportacaoES = 'esperando' Order By Criacao DESC LIMIT $limite OFFSET $pular");
+            $result = $this->DbConn->query("Select * From pedidos_anexos Where CodigoStatusExportacaoES = 'esperando' and Arquivo Like '%.pdf' Order By Criacao DESC LIMIT $limite OFFSET $pular");
         } else {
             $result = $this->DbConn->query("Select * From pedidos_anexos Where Codigo = $somenteAnexo");
         }
@@ -181,7 +183,7 @@ class PedidoAnexoIndexador
     {
         $this->AddLog("Anexo precisa ser convertido!");
         $caminhoNovo="ocr_indexador/convertidos/atual.pdf";
-        $lcOutput = FILES_PATH . "/$caminhoNovo";
+        $lcOutput = FILES_PATH . "$caminhoNovo";
 
         $this->AddLog("$lcPath " . " -> convertendo... -> " . $lcOutput);
 
@@ -193,7 +195,7 @@ class PedidoAnexoIndexador
         $this->AddLog("Convertido");
 
         // -------------------------------------
-        return $this->detect_pdf_gcs($gsPath, $gsOutput, "application/pdf");
+        return $this->detect_pdf_gcs($lcOutput, $gsOutput, "application/pdf");
     }
 
     protected function _processarXls($gsPath, $lcPath, $caminho, $gsOutput)
@@ -240,7 +242,7 @@ class PedidoAnexoIndexador
     {
         $this->AddLog("Anexo precisa ser convertido!");
         $caminhoNovo="ocr_indexador/convertidos/atual.tiff";
-        $lcOutput =FILES_PATH . "/$caminhoNovo";
+        $lcOutput =FILES_PATH . "$caminhoNovo";
 
         $this->AddLog("$lcPath " . " -> convertendo... -> " . $lcOutput);
 
@@ -251,19 +253,19 @@ class PedidoAnexoIndexador
         $this->AddLog("Convertido");
 
         // -------------------------------------
-        return $this->detect_pdf_gcs($gsPath, $gsOutput, "image/tiff");
+        return $this->detect_pdf_gcs($lcOutput, $gsOutput, "image/tiff");
     }
 
     private function cleanUpOcrDir()
     {
-        $files = glob(FILES_PATH . '/ocr_indexador/convertidos/*');
+        $files = glob(FILES_PATH . 'ocr_indexador/convertidos/*');
         foreach ($files as $file) { // iterate files
             if (is_file($file)) {
                 unlink($file); // delete file
             }
         }
 
-        $files = glob(FILES_PATH . '/ocr_indexador/*');
+        $files = glob(FILES_PATH . 'ocr_indexador/*');
         foreach ($files as $file) { // iterate files
             if (is_file($file)) {
                 unlink($file); // delete file
@@ -281,11 +283,11 @@ class PedidoAnexoIndexador
             "anexos_conteudo_arquivo" => $textos
         );
 
-        $uri = "http://www.achadosepedidos.org.br:8080/api/anexos/extractor-update/" . $row["Codigo"];
+        $uri = API_URL . "/anexos/extractor-update/" . $row["Codigo"];
         
         try {
             $this->AddLog("Indexando: " . $uri);
-            $this->AddLog("Conteudo: " . $textos);
+    //        $this->AddLog("Conteudo: " . $textos);
 
             $r = $this->ApiClient->request('PUT', $uri, [
                 'json' => $reqBody
@@ -314,7 +316,7 @@ class PedidoAnexoIndexador
 
     protected function initLogs($arquivo)
     {
-        $pastaLogs = FILES_PATH . "/ocr_indexador/logs/" . date('d-m-Y-H-i');
+        $pastaLogs = FILES_PATH . "ocr_indexador/logs/" . date('d-m-Y-H-i');
         if (!file_exists($pastaLogs)) {
             mkdir($pastaLogs, 0777, true);
         }
@@ -341,7 +343,7 @@ class PedidoAnexoIndexador
 
         // -
         $gsPath = BUCKET_PATH."/pedidos/$caminho";
-        $lcPath = FILES_PATH . "/pedidos/$caminho";  
+        $lcPath = FILES_PATH . "pedidos/$caminho";  
 
         $this->AddLog("Caminho: " . $lcPath);
         
@@ -380,12 +382,12 @@ class PedidoAnexoIndexador
         elseif ($ext === "PDF") {
             // -------------------------------------
             $this->AddLog("Avaliando como PDF");
-            $textos = $this->detect_pdf_gcs($gsPath, $gsOutput, "application/pdf");
+            $textos = $this->detect_pdf_gcs($lcPath, $gsOutput, "application/pdf");
         }
         else { // Tenta Passar Pelo VISION
             // -------------------------------------
             $this->AddLog("Avaliando como TIFF");
-            $textos = $this->detect_pdf_gcs($gsPath, $gsOutput, "image/tiff");
+            $textos = $this->detect_pdf_gcs($lcPath, $gsOutput, "image/tiff");
         }
 
         // -
@@ -412,7 +414,7 @@ class PedidoAnexoIndexador
         $CntAnexos = 0;
 
         // -
-        $this->rltCaminho = FILES_PATH  . "/RltIndexador-" . date('d-m-Y-H-i')  . ".csv";
+        $this->rltCaminho = FILES_PATH  . "RltIndexador-" . date('d-m-Y-H-i')  . ".csv";
         echo "Relatório será gerado em:" . $this->rltCaminho . PHP_EOL;
 
         file_put_contents($this->rltCaminho, "sep=,\r\n");
@@ -468,16 +470,19 @@ class PedidoAnexoIndexador
 
         try {
 
+            $this->AddLog("Vision: $path");
+
         # select ocr feature
             $feature = (new Feature())
         ->setType(Type::DOCUMENT_TEXT_DETECTION);
 
             # set $path (file to OCR) as source
-            $gcsSource = (new GcsSource())
-        ->setUri($path);
+            //$gcsSource = (new GcsSource())
+        ///->setUri($path);
 
             $inputConfig = (new InputConfig())
-        ->setGcsSource($gcsSource)
+        //->setGcsSource($gcsSource)
+        ->setContent(file_get_contents($path))
         ->setMimeType($mimeType);
 
             # set $output as destination
@@ -491,73 +496,31 @@ class PedidoAnexoIndexador
         ->setBatchSize($batchSize);
 
             # prepare request using configs set above
-            $request = (new AsyncAnnotateFileRequest())
+            $request = (new AnnotateFileRequest())
         ->setFeatures([$feature])
-        ->setInputConfig($inputConfig)
-        ->setOutputConfig($outputConfig);
+        ->setInputConfig($inputConfig);
             $requests = [$request];
 
             # make request
             $imageAnnotator = new ImageAnnotatorClient($this->googleVisionCredentials);
-            $operation = $imageAnnotator->asyncBatchAnnotateFiles($requests);
-            print('Waiting for operation to finish.' . PHP_EOL);
-            $operation->pollUntilComplete();
-
-            if ($operation->operationSucceeded()) {
-                # once the request has completed and the output has been
-                # written to GCS, we can list all the output files.
-                preg_match('/^gs:\/\/([a-zA-Z0-9\._\-]+)\/?(\S+)?$/', $output, $match);
-                $bucketName = $match[1];
-                $prefix = isset($match[2]) ? $match[2] : '';
-
-
-
-                $storage = new StorageClient($this->googleStorageCredentials);
-                $bucket = $storage->bucket($bucketName);
-                $options = ['prefix' => $prefix];
-                $objects = $bucket->objects($options);
-
-                # Search for the Output Json
-                $objects->next();
-                $firstObject = null;
-
-                # list objects with the given prefix.
-                print('Output files:' . PHP_EOL);
-                foreach ($objects as $object) {
-                    $name = $object->name();
-                    if (strpos($name, 'json') > 0 && strpos($name, 'output') >= 0) {
-                        $firstObject = $object;
-                        print($name . PHP_EOL);
+            $result = $imageAnnotator->batchAnnotateFiles($requests)->getResponses();
+            $pages = $result->count();
+            
+            # get annotation and print text
+            for ($iPagina=0; $iPagina < $pages; $iPagina++) {
+                $firstBatch = $result->offsetGet($iPagina);
+                foreach ($firstBatch->getResponses() as $response) {
+                   // print_r($response);
+                    $annotation = $response->getFullTextAnnotation();
+                    if ($annotation !== null) {
+                        $texto = $annotation->getText();
+                        $textoResultado .= "$texto" . PHP_EOL;
                     }
                 }
-
-                if ($firstObject !== null) {
-                    # process the first output file from GCS.
-                    # since we specified batch_size=2, the first response contains
-                    # the first two pages of the input file.
-                    $jsonString = $firstObject->downloadAsString();
-                    $firstBatch = new AnnotateFileResponse();
-                    $firstBatch->mergeFromJsonString($jsonString);
-
-                    # get annotation and print text
-                    foreach ($firstBatch->getResponses() as $response) {
-                        $annotation = $response->getFullTextAnnotation();
-                        if ($annotation !== null) {
-                            $texto = $annotation->getText();
-                            $textoResultado .= "$texto" . PHP_EOL;
-                        }
-                    }
-                } else {
-                    $this->AddLog("VisionAPI não retornou nenhum objeto! ");
-                }
-            } else {
-                $error = $operation->getError();
-               
-		        $this->AddLog("VisionAPI Error: " .  print_r($error, true));
-            }
-        
+            }   
+           
             $imageAnnotator->close();
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             $textoResultado = "";
             $this->AddLog("VisionAPI Error: " . $e->getMessage());
         }
