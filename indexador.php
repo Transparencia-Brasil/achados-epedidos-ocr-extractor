@@ -96,7 +96,6 @@ class PedidoAnexoIndexador
     private $ApiClient;
     private $LogAtual;
 
-
     # Explicitly use service account credentials by specifying the private key
     # file.
     private $googleVisionCredentials;
@@ -104,9 +103,6 @@ class PedidoAnexoIndexador
 
     public function Init()
     {
-
-
-
         $this->googleStorageCredentials = [
             'keyFilePath' => $_ENV["GOOGLE_APPLICATION_CREDENTIALS"]
         ];
@@ -114,7 +110,30 @@ class PedidoAnexoIndexador
         $this->googleVisionCredentials = [
             'credentials' => $_ENV["GOOGLE_APPLICATION_CREDENTIALS"]
         ];
-        if (isset($_ENV['MYSQL_ATTR_SSL_CA']) && !empty($_ENV['MYSQL_ATTR_SSL_CA'])) {
+
+		$this->Conectar();
+	
+        $rendererName = \PhpOffice\PhpWord\Settings::PDF_RENDERER_DOMPDF;
+        $rendererLibraryPath = realpath(__DIR__ . '/vendor/dompdf/dompdf');
+        \PhpOffice\PhpWord\Settings::setPdfRenderer($rendererName, $rendererLibraryPath);
+
+        $this->ApiClient = new \GuzzleHttp\Client([
+            'base_uri' => $_ENV['API_URL'],
+            'timeout'  => 60.0,
+        ]);
+    }
+	
+	protected function Desconectar() {
+        mysqli_close($this->DbConn);
+    }
+	
+	protected function Reconectar() {
+		$this->Desconectar();
+		$this->Conectar();
+	}
+	
+	protected function Conectar() {
+		if (isset($_ENV['MYSQL_ATTR_SSL_CA']) && !empty($_ENV['MYSQL_ATTR_SSL_CA'])) {
             $this->DbConn = mysqli_init();
             $this->DbConn->options(MYSQLI_OPT_SSL_VERIFY_SERVER_CERT, true);
             $this->DbConn->ssl_set(NULL, NULL, $_ENV['MYSQL_ATTR_SSL_CA'], NULL, NULL);
@@ -126,16 +145,11 @@ class PedidoAnexoIndexador
             }
          }
 
-
-        $rendererName = \PhpOffice\PhpWord\Settings::PDF_RENDERER_DOMPDF;
-        $rendererLibraryPath = realpath(__DIR__ . '/vendor/dompdf/dompdf');
-        \PhpOffice\PhpWord\Settings::setPdfRenderer($rendererName, $rendererLibraryPath);
-
-        $this->ApiClient = new \GuzzleHttp\Client([
-            'base_uri' => $_ENV['API_URL'],
-            'timeout'  => 60.0,
-        ]);
-    }
+		$this->DbConn->query("SET NAMES 'utf8'");
+        $this->DbConn->query('SET character_set_connection=utf8');
+        $this->DbConn->query('SET character_set_client=utf8');
+        $this->DbConn->query('SET character_set_results=utf8');
+	}
 
     /**
      * Realiza a Contagem de Anexos Pendentes para a Analíse no VISION
@@ -145,7 +159,7 @@ class PedidoAnexoIndexador
         $result = NULL;
         
         if (is_null($somenteAnexo)) {
-            $result = $this->DbConn->query("Select COUNT(*) as Cnt From pedidos_anexos Where CodigoStatusExportacaoES = 'esperando' and Arquivo LIKE '%.pdf'");
+            $result = $this->DbConn->query("Select COUNT(*) as Cnt From pedidos_anexos Where CodigoStatusExportacaoES = 'esperando' ");
         } else {
             $result = $this->DbConn->query("Select COUNT(*) as Cnt From pedidos_anexos Where Codigo = $somenteAnexo");
         }
@@ -171,8 +185,11 @@ class PedidoAnexoIndexador
      */
     public function BuscarAnexos($limite, $pular, $somenteAnexo = NULL)
     {
+		//auto reconnect if MySQL server has gone away
+        if (!mysqli_ping($this->DbConn)) $this->Reconectar();
+		
         if (is_null($somenteAnexo)) {
-            $result = $this->DbConn->query("Select * From pedidos_anexos Where CodigoStatusExportacaoES = 'esperando' and Arquivo Like '%.pdf' Order By Criacao DESC LIMIT $limite OFFSET $pular");
+            $result = $this->DbConn->query("Select * From pedidos_anexos Where CodigoStatusExportacaoES = 'esperando' And Codigo NOT IN (3154, 3039, 3040, 12387, 10874, 10110, 10368, 10369, 10370, 10348, 10094,10502, 10524 , 10839, 10589, 10336, 10338, 10341, 10344, 9765, 9513, 10806, 10300, 10566, 9545, 11720, 11984, 11495, 12009, 12018, 12029, 12042, 11825, 11844, 11596, 11599, 12113, 12128, 11703, 11704, 12257,12226,154566,154563,154902,154420,154411,154361,154902,26279,26822,13915 ,26810,26800,26749,26707,26704,26459,26157,26158,26159,26140,26110,25922,25623,25555,22838 ) Order By Criacao DESC LIMIT $limite OFFSET $pular");
         } else {
             $result = $this->DbConn->query("Select * From pedidos_anexos Where Codigo = $somenteAnexo");
         }
@@ -206,29 +223,53 @@ class PedidoAnexoIndexador
         $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($lcPath);
 
         $cellCount = 0;
-
-        $sheetCount = $spreadsheet->getSheetCount();
+		$rowCount = 0;
+        $sheetCount = $spreadsheet->getSheetCount();		
+		
+        $this->AddLog(" $sheetCount planinhas há serem analisadas");
+		
+		$pularExistCells =false;
+		
         for ($i = 0; $i < $sheetCount; $i++) {
-            $worksheet = $spreadsheet->getSheet($i);
-            foreach ($worksheet->getRowIterator() as $row) {
+            $worksheet = $spreadsheet->getSheet($i);			
+			$qtdLinhasBranco = 0;
+			
+            foreach ($worksheet->getRowIterator() as $row) {				
                 $rowTexto = "";
                 $cellIterator = $row->getCellIterator();
                 
-                try {
-                    $cellIterator->setIterateOnlyExistingCells(true);
-                } catch (PHPExcel_Exception $e) {
-                    $this->AddLog("Não foi possivel determinar o fim da planinha, analise poderá ser lenta.");
-                }
-                catch (\Exception $e) {
-                    $this->AddLog("Não foi possivel determinar o fim da planinha, analise poderá ser lenta.");
-                }
-
+				if(!$pularExistCells) {
+					try {
+						$cellIterator->setIterateOnlyExistingCells(true);
+					} catch (PHPExcel_Exception $e) {
+						$this->AddLog("Não foi possivel determinar o fim da planinha, analise poderá ser lenta.");
+						$pularExistCells = true;
+					}
+					catch (\Exception $e) {
+						$this->AddLog("Não foi possivel determinar o fim da planinha, analise poderá ser lenta.");
+						$pularExistCells = true;
+					}
+				}
+				
+				$cellsLinhaAtualCount = 0;
                 foreach ($cellIterator as $cell) {
                     $rowTexto .= $cell->getValue() . " ";
-                    $cellCount += 1;
+                    $cellCount ++;
+					$cellsLinhaAtualCount ++;
                 }
 
+				if($cellsLinhaAtualCount == 0 || strlen(trim($rowTexto)) <= 0) {
+					$qtdLinhasBranco++;
+				}
+				
                 $texto .= $rowTexto . PHP_EOL;
+				$rowCount++;
+				echo "$sheetCount/$rowCount" . PHP_EOL ;
+				
+				if($qtdLinhasBranco > 1000) {
+					$this->AddLog("Muitas Linhas em Branco Encontradas, CONSIDERANDO FIM DE PLANINHA.");
+					break;
+				}
             }
         }
 
@@ -273,8 +314,6 @@ class PedidoAnexoIndexador
         }
     }
 
-
-
     protected function AtualizarAnexoConteudo($row, $textos, $caminho, $ext)
     {
         echo "Indexando: " . $caminho. PHP_EOL;
@@ -290,7 +329,7 @@ class PedidoAnexoIndexador
     //        $this->AddLog("Conteudo: " . $textos);
 
             $r = $this->ApiClient->request('PUT', $uri, [
-                'json' => $reqBody
+                'json' => mb_convert_encoding( $reqBody, 'UTF-8', 'UTF-8')
             ]);
 
             // -
@@ -324,18 +363,24 @@ class PedidoAnexoIndexador
         $this->LogAtual = "$pastaLogs/$arquivo.log";
     }
 
+    protected function InitAnexo($row, &$caminho, &$codigo, &$ext) {
+        $caminho = mb_convert_encoding($row["Arquivo"], "UTF-8");
+        $codigo = $row["Codigo"];        
+        $caminhoParts = pathinfo($caminho);
+        $ext = trim(strtoupper($caminhoParts['extension']));
+        $this->initLogs($caminhoParts['filename']);
+    }
+
     /**
      * Processa o Anexo e Indexa os Textos Relacionados
      */
     public function ProcessarAnexo($row)
     {
         $this->cleanUpOcrDir();
-        $caminho = utf8_encode($row["Arquivo"]);
-        $codigo = $row["Codigo"];        
-        $caminhoParts = pathinfo($caminho);
-        $ext = trim(strtoupper($caminhoParts['extension']));
-        $this->initLogs($caminhoParts['filename']);
-
+        $caminho = "";
+        $ext = "";
+        $codigo = 0;
+        $this->InitAnexo($row, $caminho, $codigo, $ext);
         $this->AddLog("Iniciando o processamento: \r\n Código: $codigo ");
         
         // =
@@ -362,7 +407,7 @@ class PedidoAnexoIndexador
         // -------------------------------------
         // - Converte o Anexo em PDF
         // - DOCX
-        if ($ext === "DOCX" || $ext === "DOC" || $ext === "RTF" || $ext === "ODF") {
+        if ($ext === "DOCX" || $ext === "DOC" || $ext === "RTF" || $ext === "ODF" || $ext === "ODT") {
             $this->AddLog("Avaliando como DOCX");
             $textos = $this->_processarDocx($gsPath, $lcPath, $caminho, $gsOutput);
         }
@@ -410,11 +455,12 @@ class PedidoAnexoIndexador
      */
     public function Run($somenteAnexo = NULL)
     {
+        echo "PROC_INICIO_OK";
         $QTD_POR_LOTE = 100; // Ajusta a Quantidade de Anexos que irão ser processados por Lote.
         $CntAnexos = 0;
 
         // -
-        $this->rltCaminho = FILES_PATH  . "RltIndexador-" . date('d-m-Y-H-i')  . ".csv";
+        $this->rltCaminho = FILES_PATH  . "RltIndexador-" . date('d-m-Y-H')  . ".csv";
         echo "Relatório será gerado em:" . $this->rltCaminho . PHP_EOL;
 
         file_put_contents($this->rltCaminho, "sep=,\r\n");
@@ -435,22 +481,56 @@ class PedidoAnexoIndexador
                 // Pesquisa o Lote
                 echo "Fetch Lote: $iLote = $pPular / $QTD_POR_LOTE" . PHP_EOL;
                 $result = $this->BuscarAnexos($QTD_POR_LOTE, $pPular, $somenteAnexo);
+				
+				if($result === false) {
+					echo "ERRO AO RECUPERAR O LOTE: " . $this->DbConn->error . PHP_EOL;
+					die();
+				}
 
                 // Processa o Lote
                 while ($row = $result->fetch_assoc()) {
-                    try {
-                        $this->ProcessarAnexo($row);
-                    } catch (Exception $e) {
-                        echo "Erro no processamento do anexo: ";
-                        print($e->getMessage());
-                        echo PHP_EOL;
-                        $codigo = $row["Codigo"];
-                        $this->AddReportEntry($codigo,"", "", "Erro no Processamento: " . $e->getMessage());
-                        $this->AtualizarEstadoAnexo($codigo, "falha");
+                    if(is_null($somenteAnexo)) {
+                        $codigo = $row["Codigo"];  
+                        $caminho = "";
+                        $ext = "";
+
+                        $CMD = "cd " . __DIR__ . " && php indexador.php $codigo  2>&1";
+
+                        $this->InitAnexo($row, $caminho, $codigo, $ext);
+                        $this->AddLog("Iniciando para $codigo / $CMD");
+
+                        // Inicia o Processo para INDEXAR
+                        ob_start();
+                        $resultado = shell_exec($CMD);
+                        ob_end_clean();
+
+                        $this->AddLog($resultado);
+                        if(strpos($resultado, "PROC_FINAL_OK") === false) {
+                            $this->AddLog("Indexacao FALHOU: $codigo");
+                            $this->AddReportEntry($codigo,"", "", "Erro no Processamento:  Processo de Indexação falhou!" );
+                            $this->AtualizarEstadoAnexo($codigo, "falha");
+                        } else {                            
+                            $this->AddLog("Indexacao OK: $codigo");
+                        }
+                    }
+                    else {
+                        try {                                                
+                            $this->ProcessarAnexo($row);
+                        } catch (Exception $e) {
+                            echo "Erro no processamento do anexo: ";
+                            print($e->getMessage());
+                            echo PHP_EOL;
+                            $codigo = $row["Codigo"];
+                            $this->AddReportEntry($codigo,"", "", "Erro no Processamento: " . $e->getMessage());
+                            $this->AtualizarEstadoAnexo($codigo, "falha");
+                        }
                     }
                 }
             }
         }
+
+        // -
+        echo "PROC_FINAL_OK";
     }
     
     protected function AddReportEntry($codigo,$arquivo, $ext, $msg)
@@ -529,24 +609,27 @@ class PedidoAnexoIndexador
     }
 }
 
-// **************************************************************** ///
-$locker = new TaskLocker();
-if ($locker->Bloquear("PedidosAnexoIndexador")) {
-    try {
-        $indexador = new PedidoAnexoIndexador();
-        $indexador->Init();
-        
-        if (isset($argv[1])) {
-            $indexador->Run($argv[1]);
-        } else {
-            $indexador->Run(null);
-        }
-
-    } catch (Exception $e) {
-        echo "Ocorreu um erro na execução: " . $e->getMessage();
-    }
-
-    $locker->Liberar();
+function Executar($arg) {
+    $indexador = new PedidoAnexoIndexador();
+    $indexador->Init();
+    $indexador->Run($arg);
 }
 
-$locker->Fechar();
+// **************************************************************** ///
+if (!isset($argv[1])) {
+    $locker = new TaskLocker();
+    if ($locker->Bloquear("PedidosAnexoIndexador")) {
+        try {
+            Executar(null);
+        } catch (Exception $e) {
+            echo "Ocorreu um erro na execução: " . $e->getMessage();
+        }
+
+        $locker->Liberar();
+    }
+
+    $locker->Fechar();
+} else {
+    echo "Processo não bloqueado!\r\n";
+    Executar($argv[1]);
+}
