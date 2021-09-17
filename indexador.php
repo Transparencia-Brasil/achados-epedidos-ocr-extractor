@@ -189,7 +189,8 @@ class PedidoAnexoIndexador
         if (!mysqli_ping($this->DbConn)) $this->Reconectar();
 		
         if (is_null($somenteAnexo)) {
-            $result = $this->DbConn->query("Select * From pedidos_anexos Where CodigoStatusExportacaoES = 'esperando' And Codigo NOT IN (3154, 3039, 3040, 12387, 10874, 10110, 10368, 10369, 10370, 10348, 10094,10502, 10524 , 10839, 10589, 10336, 10338, 10341, 10344, 9765, 9513, 10806, 10300, 10566, 9545, 11720, 11984, 11495, 12009, 12018, 12029, 12042, 11825, 11844, 11596, 11599, 12113, 12128, 11703, 11704, 12257,12226,154566,154563,154902,154420,154411,154361,154902,26279,26822,13915 ,26810,26800,26749,26707,26704,26459,26157,26158,26159,26140,26110,25922,25623,25555,22838 ) Order By Criacao DESC LIMIT $limite OFFSET $pular");
+            // And Codigo NOT IN (3154, 3039, 3040, 12387, 10874, 10110, 10368, 10369, 10370, 10348, 10094,10502, 10524 , 10839, 10589, 10336, 10338, 10341, 10344, 9765, 9513, 10806, 10300, 10566, 9545, 11720, 11984, 11495, 12009, 12018, 12029, 12042, 11825, 11844, 11596, 11599, 12113, 12128, 11703, 11704, 12257,12226,154566,154563,154902,154420,154411,154361,154902,26279,26822,13915 ,26810,26800,26749,26707,26704,26459,26157,26158,26159,26140,26110,25922,25623,25555,22838 ) 
+            $result = $this->DbConn->query("Select * From pedidos_anexos Where CodigoStatusExportacaoES = 'esperando' Order By Criacao DESC LIMIT $limite OFFSET $pular");
         } else {
             $result = $this->DbConn->query("Select * From pedidos_anexos Where Codigo = $somenteAnexo");
         }
@@ -475,6 +476,8 @@ class PedidoAnexoIndexador
             $this->AddReportEntry("","", "", "Contagem: $CntAnexos");
 
             $qtdLotes = ceil($CntAnexos / $QTD_POR_LOTE);
+            echo "Lotes: " . $qtdLotes . PHP_EOL;
+
             for ($iLote=0; $iLote < $qtdLotes ; $iLote++) {
                 $pPular = $iLote * $QTD_POR_LOTE;
 
