@@ -92,7 +92,7 @@ class PedidoAnexoLimpar {
 
                 if($iLine >= 2) { // Pula o Sep E o Header 
                     echo $iLine . ".";        
-                    $conteudo = explode(';', $line);
+                    $conteudo = explode(',', $line);
                     $codigo = $conteudo[1];
                     $arquivo = $conteudo[2];
 
