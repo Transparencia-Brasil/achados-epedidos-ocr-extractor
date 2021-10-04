@@ -121,7 +121,7 @@ class PedidoAnexoRelatorio {
                                     $indice = array_search($codigo, array_column($anexos, "Codigo"));
                                     if($indice !== false) {
                                         $anexos[$indice]["ProcessadoEm"] = $conteudo[0];
-                                        $anexos[$indice]["Mensagem"] = $conteudo[4];
+                                        $anexos[$indice]["Mensagem"] =  trim(trim($conteudo[4]),'\n');
                                     }
                                 }
                             }
@@ -170,7 +170,8 @@ class PedidoAnexoRelatorio {
         $file = fopen(FILES_PATH . "/RltIndexadorFinal.csv", "w");
         fputcsv($file, $headers);
         foreach($anexos as $anexo){
-            fputcsv($file, array_values($anexo));
+			$anexo["Mensagem"] = trim(trim($anexo["Mensagem"]),'\r\n');
+            fputcsv($file, array_values($anexo), ",", "'");
         }
         fclose($file);
     }

@@ -110,23 +110,25 @@ class PedidoAnexoLimpar {
 
     protected function AnexoFoiIndexado($codigo)
     {
-        $uri = API_URL . "/anexos/buscar/" . $codigo;
-        
         try {
-            $r = $this->ApiClient->request('GET', $uri);
-
-            echo $r->getStatusCode() . "\n";
-            return true;
-
+            $r = $this->ApiClient->request('GET', API_URL . "/anexos/buscar/" . $codigo);
+            echo "Indexacao: " . $r->getStatusCode() . "\n";
+			
+            $anexo = json_decode($r->getBody());
+          //  print_r($anexo);
+            if(strlen($anexo->anexos_conteudo_arquivo) > 0) {
+                return 1;
+            } else {
+                return 2;
+            }
         } catch (\GuzzleHttp\Exception\RequestException $e) {
             if ($e->hasResponse()) {
-               echo (\GuzzleHttp\Psr7\str($e->getResponse())) . "\n";
-            }
+               echo (\GuzzleHttp\Psr7\str($e->getResponse())) . "\n";            }
             else {
                 echo "Falhou \n";
             }
 
-            return false;
+            return 0;
         }
     }
 
@@ -148,9 +150,12 @@ class PedidoAnexoLimpar {
             echo "Codigo: " . $anexo["Codigo"] . "\n";
 
             $anexado = $this->AnexoFoiIndexado($anexo["Codigo"]);
-            if(!$anexado ) {
+            if($anexado == 0 ) {
                 echo "Não indexado! \r\n";
                 $this->DbConn->query('DELETE FROM es_pedidos_anexos Where CodigoPedidoAnexo = ' . $anexo["Codigo"]);
+            } else if($anexado == 1) {
+                echo "Já foi Indexado! \r\n";
+                $this->DbConn->query("UPDATE pedidos_anexos Set CodigoStatusExportacaoES = 'extraido'  Where Codigo = " . $anexo["Codigo"]);
             }
         }
     }
