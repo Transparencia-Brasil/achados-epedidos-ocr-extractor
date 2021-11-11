@@ -8,7 +8,8 @@
         "guzzlehttp/guzzle": "~6.0",
         "box/spout": "^2.7",
         "symfony/dotenv": "^3.4",
-        "ext-bcmath": "*"
+        "ext-bcmath": "*",
+        "alchemy/zippy": "^1.0"
     },
     "scripts": {
         "post-root-package-install": [

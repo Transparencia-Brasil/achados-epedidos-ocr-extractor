@@ -9,6 +9,7 @@ namespace Google\Cloud\Samples\Vision;
 
 require __DIR__ . '/vendor/autoload.php';
 
+use Alchemy\Zippy\Zippy;
 use Google\Cloud\Storage\StorageClient;
 use Google\Cloud\Vision\V1\AnnotateFileRequest;
 use Google\Cloud\Vision\V1\AnnotateFileResponse;
@@ -22,6 +23,7 @@ use Google\Cloud\Vision\V1\InputConfig;
 use Google\Cloud\Vision\V1\OutputConfig;
 
 use Symfony\Component\Dotenv\Dotenv;
+use ZipArchive;
 
 $dotenv = new Dotenv();
 $dotenv->load(__DIR__.'/.env');
@@ -372,23 +374,81 @@ class PedidoAnexoIndexador
         $this->initLogs($caminhoParts['filename']);
     }
 
-    /**
-     * Processa o Anexo e Indexa os Textos Relacionados
-     */
-    public function ProcessarAnexo($row)
+    protected function ExtrairRar($fonte, $destino) {
+        // Extrai o Conteudo
+        $this->AddLog("Extraindo o Arquivo Compactado: $fonte");
+        if(!file_exists($destino)) {
+            mkdir($destino);
+        }
+
+        shell_exec(__DIR__ . "/rar/unrar x \"$fonte\" \"$destino\""); 
+    }
+
+    protected function ExtrairZip($fonte, $destino) {
+        // Extrai o Conteudo do Zip e Realiza a Analise de Cada Arquivo     
+        $zippy = Zippy::load();        
+        $zip = $zippy->open($fonte);
+
+        // Extrai o Conteudo
+        $this->AddLog("Extraindo o Arquivo Compactado: $fonte");
+        if(!file_exists($destino)) {
+            mkdir($destino);
+        }
+
+        $zip->extract($destino);
+    }
+
+    protected function AnalisarCompactado($caminho, $ext, $codigo, $row)
     {
-        $this->cleanUpOcrDir();
-        $caminho = "";
-        $ext = "";
-        $codigo = 0;
-        $this->InitAnexo($row, $caminho, $codigo, $ext);
-        $this->AddLog("Iniciando o processamento: \r\n Código: $codigo ");
-        
+        // =
+        $textos = "";
+
+        $zipPath = FILES_PATH . "pedidos/$caminho"; 
+
+        $this->AddLog("Analisando o Arquivo Compactado: $caminho");
+
+        // - Verifica se existe
+        if (file_exists($zipPath) === false) {
+            $this->AtualizarEstadoAnexo($codigo, "falha");
+            $this->AddReportEntry($codigo,$caminho, $ext, "Não existe!");
+            $this->AddLog("Anexo não encontrado");
+            echo "Não existe!";
+            return;
+        }
+
+        $tmpContentsFolder = $zipPath . "_archive/";
+        if($ext == "RAR") {
+            $this->ExtrairRar($zipPath, $tmpContentsFolder);
+        } else {
+            $this->ExtrairZip($zipPath, $tmpContentsFolder);
+        }
+
+        //
+        $this->AddLog("Analisando os Arquivos Extraidos: $tmpContentsFolder");
+        $dir = new \DirectoryIterator($tmpContentsFolder);
+        foreach ($dir as $fileinfo) {
+            if (!$fileinfo->isFile()) {
+                continue;
+            }
+
+            $caminhoArq = str_replace(FILES_PATH . "pedidos/", "", $tmpContentsFolder . basename($fileinfo->getFilename()));
+            $caminhoArqParts = pathinfo($caminhoArq);
+            $extArq = trim(strtoupper($caminhoArqParts['extension']));
+
+            $this->AddLog("Analisando: $caminhoArq");
+            $textos .= $this->Analisar($caminhoArq, $extArq, $codigo, $row);                
+        }
+
+        return $textos;
+    }
+
+    protected function Analisar($caminho, $ext, $codigo, $row)
+    {
         // =
         $textos = "";
 
         // -
-        $gsPath = BUCKET_PATH."/pedidos/$caminho";
+        $gsPath = BUCKET_PATH ."/pedidos/$caminho";
         $lcPath = FILES_PATH . "pedidos/$caminho";  
 
         $this->AddLog("Caminho: " . $lcPath);
@@ -430,10 +490,37 @@ class PedidoAnexoIndexador
             $this->AddLog("Avaliando como PDF");
             $textos = $this->detect_pdf_gcs($lcPath, $gsOutput, "application/pdf");
         }
+        elseif ($ext === "WAV" || $ext === "MP3" || $ext === "MP4") {
+            // -------------------------------------
+            $this->AddLog("Nao e possivel analisar arquivos de audio/video");
+        }
         else { // Tenta Passar Pelo VISION
             // -------------------------------------
             $this->AddLog("Avaliando como TIFF");
             $textos = $this->detect_pdf_gcs($lcPath, $gsOutput, "image/tiff");
+        }
+
+        return $textos;
+    }
+
+    /**
+     * Processa o Anexo e Indexa os Textos Relacionados
+     */
+    public function ProcessarAnexo($row)
+    {
+        $this->cleanUpOcrDir();
+        $caminho = "";
+        $ext = "";
+        $codigo = 0;
+        $this->InitAnexo($row, $caminho, $codigo, $ext);
+        $this->AddLog("Iniciando o processamento: \r\n Código: $codigo ");
+        
+        $textos = "";
+
+        if($ext == "ZIP" || $ext == "TAR" || $ext == "TAR.GZ" || $ext == "RAR") {
+            $textos = $this->AnalisarCompactado($caminho, $ext, $codigo, $row);
+        } else {
+            $textos = $this->Analisar($caminho, $ext, $codigo, $row);
         }
 
         // -
